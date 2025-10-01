@@ -1,0 +1,124 @@
+BANK.BKDAR : solde début de la période trimestrielle
+BANK.BKSLD : solde de fin de la période trimestrielle
+
+Exemple pour un compte :
+SELECT solde AS solde_debut from bank.bkdar where annee = :Annee and mois= :Mois and ncp ='01010401102';
+Solde debut d'arrêté = -639721,19
+
+
+Voici mes 3 tables temporaires que je vais utiliser pour faire mes calculs
+-- BKSLD --
+CREATE GLOBAL TEMPORARY TABLE TMP_BKSLD_D (
+                                            AGE   VARCHAR2(10),
+                                            DEV   VARCHAR2(3),
+                                            NCP   VARCHAR2(20),
+                                            SDE   NUMBER(18,2)
+) ON COMMIT DELETE ROWS;
+
+-- BKDAR --
+CREATE GLOBAL TEMPORARY TABLE TMP_BKDAR_D (
+                                            AGE      VARCHAR2(10),
+                                            DEV      VARCHAR2(3),
+                                            NCP      VARCHAR2(20),
+                                            NBC      NUMBER,
+                                            TXC      NUMBER(10,4),
+                                            NBR      NUMBER,
+                                            TAUX     NUMBER(10,4),
+                                            SOLDE    NUMBER(18,2),
+                                            NOMREST  VARCHAR2(100),
+                                            ADR1     VARCHAR2(100),
+                                            ADR2     VARCHAR2(100),
+                                            CPOS     VARCHAR2(10),
+                                            CLC      VARCHAR2(10),
+                                            DATR     DATE,
+                                            TCLI     VARCHAR2(10),
+                                            VIL      VARCHAR2(50),
+                                            CLI      VARCHAR2(20)
+) ON COMMIT DELETE ROWS;
+
+
+-- BKHIS --
+CREATE GLOBAL TEMPORARY TABLE TMP_BKHIS_D (
+                                            AGE VARCHAR2(10),
+                                            DEV       VARCHAR2(3),
+                                            NCP       VARCHAR2(20),
+                                            DCO       DATE,
+                                            DVA       DATE,
+                                            MON       NUMBER(18,2),
+                                            SEN       CHAR
+) ON COMMIT DELETE ROWS;
+
+
+
+
+dateDebutArrete = date début arrêté saisi par l'utilisateur (ex : 01/01/2024)
+dateFinArrete = date fin arrêté saisi par l'utilisateur (ex : 31/03/2024)
+datePremierJourOuvrableProchainTrimestre = date du premier jour ouvrable du trimestre suivant (ex : 01/04/2024)
+dateDernierJourOuvrableTrimestre = date du dernier jour ouvrable du trimestre en cours (ex : 28/03/2024)
+
+BKHIS_D :
+    getAge(), getDev(), getNcp(), getDco(), getDva(), getMon(), getSen()
+
+
+getAllComptesInBkdarD()
+    return liste de tous les comptes (NCP) distinct dans la table BKDAR_D
+
+
+getDateDebutArretePourCompteInBkdar(ncp, dateDebutArrete)
+    Si dateDebutArrete n'existe pas pour un compte NCP dans la table BKDAR_D
+            DATR : order by ASC
+            dateDebutArrete = prochaine date DATR dans BKDAR_D après dateDebutArrete
+    return dateDebutArrete
+
+
+getSoldeDebutArrete(getAllComptesInBkdar(), dateDebutArrete)
+    return SoldeDebutArrete (colonne : SOLDE) de début d'arrêté (dateDebutArrete) pour le compte NCP dans la table BKDAR_D.
+
+
+getTransactionForCompte(ncp, dateTransaction)
+    <DTO>transaction = select* from BKHIS_D where NCP = ncp and DVA = dateTransaction
+    return transaction
+
+
+calculNbJours(date1, date2)
+    return nombre de jours entre date1 et date2
+
+
+
+gestionTransactionPourChaqueCompte(ncp, Solde)
+    S1 = getSoldeDebutArrete(ncp, getDateDebutArretePourCompteInTmpBkdar(ncp, dateDebutArrete))
+    sensMouvement = SELECT SEN from BKHIS_D where NCP = ncp and DVA = dateDebutArrete
+    date1 = dateDebutArrete
+    nbJours = 0
+
+    //1ere ligne de l'historique des transactions
+    (ex: date1 : 01/01/2024, solde : 689.10, montantTransaction : 0, nbJours : 0)
+    Pour chaque ligne
+        S1 = getSoldeDebutArrete(ncp, dateDebutArrete)
+        S2 = S1
+        montantTransaction = 0
+        getProchaineDateTransaction(ncp, date1)
+            nextDate = SELECT DVA from BKHIS_D where NCP = ncp and DVA > date1 order by DCO ASC
+            return nextDate
+        nbJours = calculNbJours(date1, nextDate)
+
+        if sensMouvement == 'C'
+            montantTransaction = BkhisD.getMon()
+            S2+= Bkhis.getMon()
+
+        else if sensMouvement == 'D'
+            montantTransaction = -BkhisD.getMon()
+            S2+= négatif de Bkhis.getMon()
+
+        //2eme ligne de l'historique des transactions
+        (ex: date2 : nextDate, solde : S2, montantTransaction : montantTransaction, nbJours : nbJours)
+
+        print("date1 : " + date1 + ", solde : " + S1 + ", montantTransaction : " + montantTransaction + ", nbJours : " + nbJours)
+
+
+
+
+
+    datePrecedente = date début arrêté saisi par l'utilisateur (ex : 01/01/2024)
+
+
